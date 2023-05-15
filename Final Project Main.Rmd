@@ -1,0 +1,251 @@
+---
+title: "Final Project Main"
+author: "Duncan Ofosu"
+date: "5/14/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Final Project
+
+For this project, we will visualize a few of the match events by Lionel Messi that helped him to lead Argentina to a World Cup victory. There are a few important packages that need to be installed for ease of reproducibility.The data used for this project is from the Statsbomb API. To get access to the data, please follow the instructions below
+
+### Key Info
+Please, there are a number of packages that have to be installed along way for reproducibilty. It is important to install such packages before running the next subsequent code. The packages and API needed to be installed/linked have been added in various sections along this project
+
+### Accessing the Statsbomb API
+```{r }
+install.packages("devtools") 
+install.packages("remotes") 
+remotes::install_version("SDMTools", "1.1-221")
+```
+
+### Installing StatsbombR
+
+We will use a lot of this package for most of the tasks. To install it, please run the next chunk
+
+```{r , include=FALSE}
+devtools::install_github("statsbomb/StatsBombR")
+```
+
+### Loading the relevant packages
+
+```{r, include=FALSE}
+library(tidyverse)
+library(StatsBombR)
+library(ggplot2)
+
+```
+
+### Extracting the 2022 Qatar World Cup datasets from the Statsbomb API
+
+```{r}
+#We will filter data from the 2022 Fifa World Cup
+Competition <- FreeCompetitions()%>%
+  filter(competition_id ==43 & season_name == "2022")
+
+#Pulling all the desired matches
+Matches <- FreeMatches(Competition)
+
+#Creating a dataframe to all the events data
+StatsBombData <- free_allevents(MatchesDF = Matches, Parallel = T)
+
+StatsBombData = allclean(StatsBombData)
+
+```
+
+### Next, we will plot all the passes of Lionel Messi in the 2022 World Cup. To do this, we will  need to plot a football pitch. Statsbomb has an inbuilt package to facilitate that. Let us install that first
+
+```{r, include=FALSE}
+install.packages('SBpitch')
+```
+
+### Now, we can load the package and filter out all the passes of Lionel Messi and plot it
+
+
+```{r}
+library(SBpitch)
+
+passes = StatsBombData %>%
+#From the data, the player ID for Lionel Messi is 5503
+filter(type.name=="Pass" & is.na(pass.outcome.name) &
+           player.id==5503) %>% #1
+  filter(pass.end_location.x>=102 & pass.end_location.y<=62 &
+           pass.end_location.y>=18) #2
+create_Pitch() +
+  geom_segment(data = passes, aes(x = location.x, y = location.y,
+                                  xend = pass.end_location.x, yend = pass.end_location.y), lineend = "round", size = 0.5, colour = "#000000", arrow =
+                 arrow(length = unit(0.07, "inches"), ends = "last", type = "open")) + 
+                 labs(title = "Lionel Messi, Completed Box Passes", subtitle = "Qatar World Cup,
+  2022") + 
+ scale_y_reverse() +  coord_fixed(ratio = 105/100) + theme(axis.text = element_text(size=7, color="#333333", family="Source Sans Pro"))
+ggsave('passes.png',width = 14.4, height = 9.2)
+
+```
+
+### Plotting all the Messi passes at the World Cup
+```{r}
+passes = StatsBombData %>%
+#From the data, the player ID for Lionel Messi is 5503
+filter(type.name=="Pass"  &
+           player.id==5503) 
+create_Pitch() +
+  geom_segment(data = passes, aes(x = location.x, y = location.y,
+                                  xend = pass.end_location.x, yend = pass.end_location.y), lineend = "round", size = 0.5, colour = "#000000", arrow =
+                 arrow(length = unit(0.07, "inches"), ends = "last", type = "open")) + 
+                 labs(title = "Lionel Messi, All Passes", subtitle = "Qatar World Cup,
+  2022") + 
+ scale_y_reverse() +  coord_fixed(ratio = 105/100) + theme(axis.text = element_text(size=7, color="#333333", family="Source Sans Pro"))
+```
+
+
+### Now, to plot the pass heatmaps, we will need the beautiful package ggshakeR. We will have to install it first and subsequently call the library.
+
+```{r}
+devtools::install_github("abhiamishra/ggshakeR")
+
+```
+
+
+### Plotting all the passes Messi took at the World Cup. We then visualize how often each pass happened on different 
+### zones of the pitch
+```{r}
+library(ggshakeR)
+
+passes = StatsBombData %>%
+#From the data, the player ID for Lionel Messi is 5503
+filter(type.name=="Pass" & 
+           player.id==5503)  #1
+
+#Renaming the columns
+passes<- passes %>%
+  rename("x" = "location.x",
+         "y" = "location.y",
+         "finalX" = "pass.end_location.x",
+         "finalY" = "pass.end_location.y")
+
+passflowPlot <- plot_passflow(data = passes)
+
+passflowPlot 
+ggsave('all_pass_heatmap.png',width = 14.4, height = 9.2)
+
+```
+
+
+
+```{r}
+#For this, we will plot only the completed passes for Lionel Messi
+
+completed_passes = StatsBombData %>%
+#From the data, the player ID for Lionel Messi is 5503
+filter(type.name=="Pass" & is.na(pass.outcome.name) &
+           player.id==5503)  #1
+
+#Renaming the columns
+completed_passes<- completed_passes %>%
+  rename("x" = "location.x",
+         "y" = "location.y",
+         "finalX" = "pass.end_location.x",
+         "finalY" = "pass.end_location.y")
+
+passflowPlot <- plot_passflow(data = completed_passes)
+
+passflowPlot 
+ggsave('completed_pass_heatmap.png',width = 14.4, height = 9.2)
+```
+### We will do a barplot visualizing players that led in the goal and chance created in the World Cup.
+### xG is a measure of the quality of goals for a player and xA is a mearsure of chances created for a player
+
+```{r}
+xGA = StatsBombData %>%
+  filter(type.name=="Shot") %>% 
+  select(shot.key_pass_id, xGA = shot.statsbomb_xg) 
+
+  shot_assists = left_join(StatsBombData, xGA, by = c("id" = "shot.key_pass_id")) %>% 
+  select(team.name, player.name, player.id, type.name, pass.shot_assist, pass.goal_assist, xGA ) %>% 
+  filter(pass.shot_assist==TRUE | pass.goal_assist==TRUE) 
+
+
+#Combing xG and xGA per 90
+player_xGA = shot_assists %>% group_by(player.name, player.id, team.name) %>% summarise(xGA = sum(xGA, na.rm = TRUE)) 
+player_xG = StatsBombData %>%
+filter(type.name=="Shot") %>% filter(shot.type.name!="Penalty" | is.na(shot.type.name)) %>% group_by(player.name, player.id, team.name) %>% summarise(xG = sum(shot.statsbomb_xg, na.rm = TRUE)) %>% left_join(player_xGA) %>%
+
+  mutate(xG_xGA = sum(xG+xGA, na.rm =TRUE) ) 
+  player_minutes = get.minutesplayed(StatsBombData)
+  player_minutes = player_minutes %>% group_by(player.id) %>%
+    summarise(minutes = sum(MinutesPlayed)) 
+
+  player_xG_xGA = left_join(player_xG, player_minutes) %>% mutate(nineties = minutes/90,
+                                                                  xG_90 = round(xG/nineties, 2),
+                                                                  xGA_90 = round(xGA/nineties,2),
+                                                                  xG_xGA90 = round(xG_xGA/nineties,2) ) 
+  chart = player_xG_xGA %>% ungroup() %>% filter(minutes>=600) %>% top_n(n = 15, w = xG_xGA90) 
+  chart<-chart %>%
+    select(1, 9:10)%>%
+    pivot_longer(-player.name, names_to = "variable", values_to = "value") %>% filter(variable=="xG_90" | variable=="xGA_90") 
+
+### Now, let us plot the bar chart
+  ggplot(chart, aes(x =reorder(player.name, value), y = value, fill=fct_rev(variable))) +  geom_bar(stat="identity", colour="white")+
+    labs(title = "Expected Goal Contribution", subtitle = "2022 Qatar World Cup",
+         x="", y="Per 90", caption ="Minimum 600 minutes\nNPxG = Value of shots taken (no penalties)\nxG assisted = Value of shots assisted")+ theme(axis.text.y = element_text(size=14, color="#333333", family="Source Sans Pro"),
+                                                                                                                                                     axis.title = element_text(size=14, color="#333333", family="Source Sans Pro"),
+                                                                                                                                                     axis.text.x = element_text(size=14, color="#333333", family="Source Sans Pro"),
+                                                                                                                                                     axis.ticks = element_blank(),
+                                                                                                                                                     panel.background = element_rect(fill = "white", colour = "white"),
+                                                                                                                                                     plot.background = element_rect(fill = "white", colour ="white"),
+                                                                                                                                                     panel.grid.major = element_blank(), panel.grid.minor = element_blank(), plot.title=element_text(size=24, color="#333333", family="Source Sans Pro" , face="bold"), plot.subtitle=element_text(size=18, color="#333333", family="Source Sans Pro", face="bold"), plot.caption=element_text(color="#333333", family="Source Sans Pro", size =10), text=element_text(family="Source Sans Pro"),
+                                                                                                                                                     legend.title=element_blank(),
+                                                                                                                                                     legend.text = element_text(size=14, color="#333333", family="Source Sans Pro"), legend.position = "bottom") + 
+    scale_fill_manual(values=c("#3371AC", "#DC2228"), labels = c( "xG Assisted","NPxG")) +  scale_y_continuous(expand = c(0, 0), limits= c(0,max(chart$value) + 0.3)) +  coord_flip()+ 
+    guides(fill = guide_legend(reverse = TRUE)) 
+  ggsave("barplot.png",width = 14.4, height = 9)
+
+
+```
+### Finally, we show a plot of the shots taken in the World Cup. The plot will show the quality of shots taken. Generally, the closer and wider goal angle you see, the higher your chances of scoring a goal. Shots that were as a result of penalty are excluded because penalties
+
+```{r}
+  shots = StatsBombData %>%
+    filter(type.name=="Shot" & (shot.type.name!="Penalty" | is.na(shot.type.name)) & player.id==5503) 
+  shotmapxgcolors <- c("#192780", "#2a5d9f", "#40a7d0", "#87cdcf", "#e7f8e6", "#f4ef95", "#FDE960", "#FCDC5F", "#F5B94D", "#F0983E", "#ED8A37", "#E66424", "#D54F1B", "#DC2608", "#BF0000", "#7F0000", "#5F0000") 
+  
+  ggplot() +
+    annotate("rect",xmin = 0, xmax = 120, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 0, xmax = 60, ymin = 0, ymax = 80, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 18, xmax = 0, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 102, xmax = 120, ymin = 18, ymax = 62, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 0, xmax = 6, ymin = 30, ymax = 50, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 120, xmax = 114, ymin = 30, ymax = 50, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 120, xmax = 120.5, ymin =36, ymax = 44, fill = NA, colour = "black", size = 0.6) + annotate("rect",xmin = 0, xmax = -0.5, ymin =36, ymax = 44, fill = NA, colour = "black", size = 0.6) + annotate("segment", x = 60, xend = 60, y = -0.5, yend = 80.5, colour = "black", size = 0.6)+ annotate("segment", x = 0, xend = 0, y = 0, yend = 80, colour = "black", size = 0.6)+ annotate("segment", x = 120, xend = 120, y = 0, yend = 80, colour = "black", size = 0.6)+
+    theme(rect = element_blank(),
+          line = element_blank()) +
+    # add penalty spot right
+    annotate("point", x = 108 , y = 40, colour = "black", size = 1.05) + annotate("path", colour = "black", size = 0.6,
+                                                                                  x=60+10*cos(seq(0,2*pi,length.out=2000)),
+                                                                                  y=40+10*sin(seq(0,2*pi,length.out=2000)))+ # add centre spot
+    annotate("point", x = 60 , y = 40, colour = "black", size = 1.05) + annotate("path", x=12+10*cos(seq(-0.3*pi,0.3*pi,length.out=30)), size = 0.6,
+                                                                                 y=40+10*sin(seq(-0.3*pi,0.3*pi,length.out=30)), col="black") + annotate("path", x=107.84-10*cos(seq(-0.3*pi,0.3*pi,length.out=30)), size = 0.6,
+                                                                                                                                                         y=40-10*sin(seq(-0.3*pi,0.3*pi,length.out=30)), col="black") +
+    geom_point(data = shots, aes(x = location.x, y = location.y, fill = shot.statsbomb_xg, shape = shot.body_part.name),size = 6, alpha = 0.8) + 
+    
+    theme(axis.text.x=element_blank(),
+          axis.title.x = element_blank(),
+          axis.title.y = element_blank(),
+          plot.caption=element_text(size=13, hjust=0.5, vjust=0.5), plot.subtitle = element_text(size = 18,  hjust = 0.5), axis.text.y=element_blank(),
+          legend.position = "top",
+          legend.title=element_text(size=22), legend.text=element_text(size=20),
+          legend.margin = margin(c(20, 10, -85, 50)),
+          legend.key.size = unit(1.5, "cm"),
+          plot.title = element_text(margin = margin(r = 10, b = 10), face="bold",size = 32.5,  colour = "black", hjust = 0.5),
+          legend.direction = "horizontal",
+          axis.ticks=element_blank(),
+          aspect.ratio = c(65/100),
+          plot.background = element_rect(fill = "white"),
+          strip.text.x = element_text(size=13)) +
+    labs(title = "Lionel Messi, Shot Map", subtitle = "Qatar World Cup 2022, Messi Foot = Left") +
+    scale_fill_gradientn(colours = shotmapxgcolors, limit = c(0,0.8), oob=scales::squish, name = "Expected Goals Value") + 
+    
+    scale_shape_manual(values = c("Head" = 21, "Right Foot" = 23, "Left Foot" = 24), name ="") +  guides(fill = guide_colourbar(title.position = "top"),
+    shape = guide_legend(override.aes = list(size = 7, fill = "black"))) +  coord_flip(xlim = c(85, 125)) 
+  ggsave("shotmap.png", width = 14.4, height = 8.1)
+
+
+```
